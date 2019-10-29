@@ -52,6 +52,51 @@ module IncludesIIDX
       @associated.merge!(other.associated)
     end
 
+    # @abstract Get the association of a class from its name
+    # @return [ActiveRecord::Reflection]
+    def self.association_for(klass, name)
+      klass.reflect_on_all_associations.each do |a|
+        return a if a.name == name
+      end
+      nil
+    end
+
+    # @abstract Get the klass pointed by an expection from its name
+    # @return [<T>]
+    def self.associated_klass_for(klass, name)
+      association_for(klass, name)&.klass
+    end
+
+    # @abstract Resolve an DependenceSet in the context of a klass by replacing
+    #           abstract elements (user-defined dependencies) by associations
+    # @return [DependenceSet]
+    def resolve_for(klass)
+      res = IncludesIIDX::DependenceSet.empty
+
+      # Resolve direct dependencies
+      @direct.each do |d|
+        if (attr_deps = klass.iidx_dependencies[d])
+          res.merge!(attr_deps.resolve_for(klass))
+        else
+          if klass.respond_to?(:translated_attribute_names) && d.in?(klass.translated_attribute_names)
+            res.direct |= [:translations]
+          elsif IncludesIIDX::DependenceSet.association_for(klass, d)
+            res.direct |= [d]
+          end
+        end
+      end
+      # Resolve association dependencies
+      @associated.each do |k, v|
+        res.associated[k] = if (sub = IncludesIIDX::DependenceSet.associated_klass_for(klass, k))
+                              # Resolve associated klass if any
+                              v.resolve_for(sub)
+                            else
+                              v
+                            end
+      end
+      res
+    end
+
     # @abstract Return an empty DependenceSet
     def self.empty
       new([])
