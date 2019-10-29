@@ -14,6 +14,7 @@ module IncludesIIDX
             @direct << a
           when 'Hash'
             a.each do |k, v|
+              # Deep recursive initialization, all subsets are converted to DependenceSets
               @associated[k] = IncludesIIDX::DependenceSet.new(v)
             end
           else
@@ -31,6 +32,9 @@ module IncludesIIDX
       end
     end
 
+    # @abstract Convert the DependenceSet to an array, possibly terminated by an hash
+    # @note The output format is the one used by ActiveRecord `includes` scope
+    # @return [Array]
     def to_a
       copy = dup
       res = []
@@ -42,11 +46,13 @@ module IncludesIIDX
       res
     end
 
+    # @abstract Merge two DependenceSets
     def merge!(other)
       @direct |= other.direct
       @associated.merge!(other.associated)
     end
 
+    # @abstract Return an empty DependenceSet
     def self.empty
       new([])
     end

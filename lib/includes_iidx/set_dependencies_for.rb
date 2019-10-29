@@ -16,11 +16,11 @@ module IncludesIIDX
       end
 
       def iidx_to_include_for(*attributes)
-        IncludesIIDX::ResolveDependences.perform_for(self, IncludesIIDX::DependenceSet.new(attributes))
+        IncludesIIDX::ResolveDependencies.perform_for(self, IncludesIIDX::DependenceSet.new(attributes))
       end
 
       def set_dependencies_for(name, deps)
-        self.iidx_dependencies[name] = IncludesIIDX::DependenceSet.new(deps)
+        iidx_dependencies[name] = IncludesIIDX::DependenceSet.new(deps)
       end
     end
   end
