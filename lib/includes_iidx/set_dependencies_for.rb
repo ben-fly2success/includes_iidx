@@ -4,8 +4,8 @@ module IncludesIIDX
       base.extend(ClassMethods)
       base.class_eval do
         scope :includes_iidx, lambda { |*attributes|
-          to_include = iidx_to_include_for(*attributes).to_a
-          to_include.any? ? includes(*to_include) : all
+          deps = iidx_deps_for(*attributes).to_a
+          deps.any? ? includes(*deps) : all
         }
       end
     end
@@ -15,7 +15,7 @@ module IncludesIIDX
         @iidx_dependencies ||= {}
       end
 
-      def iidx_to_include_for(*attributes)
+      def iidx_deps_for(*attributes)
         IncludesIIDX::DependenceSet.new(attributes).resolve_for(self)
       end
 

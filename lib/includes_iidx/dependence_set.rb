@@ -1,34 +1,24 @@
 module IncludesIIDX
   class DependenceSet
-    attr_accessor :direct
-    attr_accessor :associated
+    attr_accessor :deps
 
     def initialize(combined)
-      @direct = []
-      @associated = {}
-      case combined.class.name
-      when 'Array'
-        combined.each do |a|
-          case a.class.name
-          when 'Symbol'
-            @direct << a
-          when 'Hash'
-            a.each do |k, v|
-              # Deep recursive initialization, all subsets are converted to DependenceSets
-              @associated[k] = IncludesIIDX::DependenceSet.new(v)
-            end
-          else
-            raise "Dependence type not handled: #{a.class.name} (valid types are Symbol, Hash)"
+      @deps = {}
+      if combined.class.name != 'Array'
+        combined = [combined]
+      end
+      combined.each do |a|
+        case a.class.name
+        when 'Symbol'
+          @deps[a] = IncludesIIDX::DependenceSet.empty
+        when 'Hash'
+          a.each do |k, v|
+            # Deep recursive initialization, all subsets are converted to DependenceSets
+            @deps[k] = IncludesIIDX::DependenceSet.new(v)
           end
+        else
+          raise "Dependence type not handled: #{a.class.name} (valid types are Symbol, Hash)"
         end
-      when 'Symbol'
-        @direct << combined
-      when 'Hash'
-        combined.each do |k, v|
-          @associated[k] = IncludesIIDX::DependenceSet.new(v)
-        end
-      else
-        raise "Dependence type not: handled: #{combined.class.name} (valid types are Symbol, Hash)"
       end
     end
 
@@ -36,20 +26,21 @@ module IncludesIIDX
     # @note The output format is the one used by ActiveRecord `includes` scope
     # @return [Array]
     def to_a
-      copy = dup
-      res = []
-      res += copy.direct
-      copy.associated.each do |k, v|
-        copy.associated[k] = v.to_a
+      direct = []
+      associated = {}
+      @deps.each do |k, v|
+        if v.empty?
+          direct << k
+        else
+          associated[k] = v.to_a
+        end
       end
-      res.push(copy.associated) unless copy.associated.empty?
-      res
+      direct + (associated.any? ? [associated] : [])
     end
 
     # @abstract Merge two DependenceSets
     def merge!(other)
-      @direct |= other.direct
-      @associated.merge!(other.associated)
+      @deps.deep_merge!(other.deps)
     end
 
     # @abstract Get the association of a class from its name
@@ -73,28 +64,20 @@ module IncludesIIDX
     def resolve_for(klass)
       res = IncludesIIDX::DependenceSet.empty
 
-      # Resolve direct dependencies
-      @direct.each do |d|
-        if (attr_deps = klass.iidx_dependencies[d])
+      @deps.each do |k, v|
+        if (sub = IncludesIIDX::DependenceSet.associated_klass_for(klass, k))
+          res.deps[k] = v.resolve_for(sub)
+        elsif (attr_deps = klass.iidx_dependencies[k])
           res.merge!(attr_deps.resolve_for(klass))
-        else
-          if klass.respond_to?(:translated_attribute_names) && d.in?(klass.translated_attribute_names)
-            res.direct |= [:translations]
-          elsif IncludesIIDX::DependenceSet.association_for(klass, d)
-            res.direct |= [d]
-          end
+        elsif klass.respond_to?(:translated_attribute_names) && k.in?(klass.translated_attribute_names)
+          res.merge!(IncludesIIDX::DependenceSet.new([:translations]))
         end
       end
-      # Resolve association dependencies
-      @associated.each do |k, v|
-        res.associated[k] = if (sub = IncludesIIDX::DependenceSet.associated_klass_for(klass, k))
-                              # Resolve associated klass if any
-                              v.resolve_for(sub)
-                            else
-                              v
-                            end
-      end
       res
+    end
+
+    def empty?
+      deps.empty?
     end
 
     # @abstract Return an empty DependenceSet
