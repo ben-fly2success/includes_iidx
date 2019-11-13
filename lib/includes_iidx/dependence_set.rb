@@ -55,7 +55,13 @@ module IncludesIIDX
     # @abstract Get the klass pointed by an expection from its name
     # @return [<T>]
     def self.associated_klass_for(klass, name)
-      association_for(klass, name)&.klass
+      if asso = association_for(klass, name)
+        if asso.polymorphic?
+          :polymorphic
+        else
+          asso.klass
+        end
+      end
     end
 
     # @abstract Resolve an DependenceSet in the context of a klass by replacing
@@ -66,10 +72,12 @@ module IncludesIIDX
 
       @deps.each do |k, v|
         if (sub = IncludesIIDX::DependenceSet.associated_klass_for(klass, k))
-          res.deps[k] = v.resolve_for(sub)
-        elsif (attr_deps = klass.iidx_dependencies[k])
+          res.deps[k] = sub == :polymorphic ? {} : v.resolve_for(sub)
+        end
+        if (attr_deps = klass.iidx_dependencies[k])
           res.merge!(attr_deps.resolve_for(klass))
-        elsif klass.respond_to?(:translated_attribute_names) && k.in?(klass.translated_attribute_names)
+        end
+        if klass.respond_to?(:translated_attribute_names) && k.in?(klass.translated_attribute_names)
           res.merge!(IncludesIIDX::DependenceSet.new([:translations]))
         end
       end
